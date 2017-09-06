@@ -680,14 +680,14 @@ int cmdParse(char *inpSt)
 			// read I ADC; if close to rail, could be first read after power-up, so read again
 			vadc = AD7860_SPI_bitbang(SPI_CLK_M, SPI_MISO_M, ILOG_CS, ADCVREF, BEX_ADDR);
 			if (vadc > (ADCVREF - 0.01)) vadc = AD7860_SPI_bitbang(SPI_CLK_M, SPI_MISO_M, ILOG_CS, ADCVREF, BEX_ADDR);
-			printf("{\"testset\":{\"valid:true\", \"Rx\":%d, \"Temp\":%2.f, \"I\":{\"PDV\":%f, \"PDdB\":%.1f}}",
-					dcmSel, AD7814_SPI_bitbang(SPI_CLK_M, SPI_MISO_M, BOARD_T_CS, BEX_ADDR),
+			printf("{\"testset\":{\"valid\":true, \"Rx\":%d, \"Temp\":%.1f, \"I\":{\"PDV\":%f, \"PDdB\":%.1f}",
+					dcm, AD7814_SPI_bitbang(SPI_CLK_M, SPI_MISO_M, BOARD_T_CS, BEX_ADDR),
 					vadc, vadc*DBMSCALE+DBMOFFSET);
 			logampOut[2*dcm_idx] = vadc;
 			// read Q ADC; if close to rail, could be first read after power-up, so read again
 			vadc = AD7860_SPI_bitbang(SPI_CLK_M, SPI_MISO_M, QLOG_CS, ADCVREF, BEX_ADDR);
 			if (vadc > (ADCVREF - 0.01)) vadc = AD7860_SPI_bitbang(SPI_CLK_M, SPI_MISO_M, QLOG_CS, ADCVREF, BEX_ADDR);
-			printf(", \"Q\":{\"PDV\":%f, \"PDdB\":%.1f}}\r\n", vadc, vadc*DBMSCALE+DBMOFFSET);
+			printf(", \"Q\":{\"PDV\":%f, \"PDdB\":%.1f}}}\r\n", vadc, vadc*DBMSCALE+DBMOFFSET);
 			logampOut[2*dcm_idx+1] = vadc;
 			closeI2Cbus();
 		} else {
@@ -709,7 +709,7 @@ int cmdParse(char *inpSt)
 						attenVal[2], attenVal[3], logampOut[2], logampOut[3],
 						logampOut[2]*DBMSCALE+DBMOFFSET, logampOut[3]*DBMSCALE+DBMOFFSET);
 		} else if (!strcasecmp(dev, "JE")) {
-				printf("{\"testset\":{\"valid=true\", \"Rx\":[4, 5], \"attnI\":[%d, %d], \"attnQ\":[%d, %d], "
+				printf("{\"testset\":{\"valid\":true, \"Rx\":[4, 5], \"attnI\":[%d, %d], \"attnQ\":[%d, %d], "
 						"\"PDVI\":[%f, %f], \"PDVQ\":[%f, %f], \"PDdBI\":[%.2f, %.2f], "
 						"\"PDdBQ\":[%.2f, %.2f]}}\r\n",
 						attenVal[0], attenVal[1], attenVal[2], attenVal[3],
