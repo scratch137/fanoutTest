@@ -3,7 +3,7 @@ Description: Simple code for test DCM2 fanout board.
 
 AH 2016.01.10, 2017.06.02
 
-    included comment for testing github 9/6/17
+    included comment for testing github 9/16/2017
 -------------------------------------------------------------------*/
 #include "predef.h"
 #include <stdio.h>
