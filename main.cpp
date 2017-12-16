@@ -2,6 +2,10 @@
 Description: Simple code for test DCM2 fanout board.
 
 AH 2016.01.10, 2017.06.02
+
+Expanded for lab setup of full DCM2 fanout board
+
+AH 2017.12.16
 -------------------------------------------------------------------*/
 #include "predef.h"
 #include <stdio.h>
@@ -30,7 +34,7 @@ AH 2016.01.10, 2017.06.02
 // Other defines
 const char *AppName = "fanoutTest";
 
-#define VER "\r\n\r\n   **** COMAP DCM2 test setup, v. 20170903 ****\r\n\r\n"
+#define VER "\r\n\r\n   **** COMAP DCM2 test setup, v. 20171216 ****\r\n\r\n"
 
 // I2C read/write; switch to 0 for no hardware
 #if 1
@@ -47,12 +51,12 @@ const char *AppName = "fanoutTest";
 #define I2CREAD2 0
 #endif
 
-// sub-bus addresses
-#define I2C_SB0 0x01   // on-board switch setting for sub-buses
-// subsub-bus addresses
-#define I2C_SSB7 0x80  // on-board BEX
-#define I2C_SSB5 0x20  // S5 firewire connector
-#define I2C_SSB4 0x10  // S4 firewire connector
+// addresses to talk with DCM2 modules
+#define I2C_SB0 0x10   // on-board subbus switch setting for A/B 1
+#define I2C_SSB5 0x04  // S5 firewire connector, connects to A 1
+#define I2C_SSB4 0x80  // S4 firewire connector, connects to B 1
+// addresses to talk with peripherals
+#define I2C_SB7 0x80  // on-board BEX
 
 // For test board
 // SPI masks
@@ -105,12 +109,22 @@ void UserMain(void * pd);
 // Telnet
 char RXBuffer[RX_BUFSIZE];
 
-//I2C
+// I2C
 BYTE buffer[I2C_MAX_BUF_SIZE];
 char I2CInputBuffer[I2C_MAX_BUF_SIZE];   // User created I2C input buffer
 char* inbuf = I2CInputBuffer;            // Pointer to user I2C buffer
 BYTE address = 0;
 BYTE I2CStat;
+
+// Channel-specific structure
+struct dcm2chan {
+	BYTE status[20]; // status byte
+	BYTE iAtten[20]; // command attenuation, I channel
+	BYTE qAtten[20]; // command attenuation, Q channel
+	float iPowDet[20]; // nominal power in dBm, I channel
+	float qPowDet[20]; // nominal power in dBm, Q channel
+	float bTemp[20];   // board temperature, C
+};
 
 
 // Functions
@@ -129,7 +143,31 @@ DWORD TcpServerTaskStack[USER_TASK_STK_SIZE];
 
 
 /*------------------------------------------------------------------
- * Set up I2C bus for fanout test
+ * Set up I2C subbus
+ ------------------------------------------------------------------*/
+int openI2Csbus(BYTE addr_sb)
+{
+	  address = 0x77;        // I2C switch address 0x77 for top-level switch
+	  buffer[0] = addr_sb;   // I2C channel address  0x01 for second-level switch
+	  I2CStat = I2CSEND1;
+
+  return (I2CStat==0 ? 0 : -1);
+}
+
+/*------------------------------------------------------------------
+ * Close I2C subbus switch
+ ------------------------------------------------------------------*/
+int closeI2Csbus(void)
+{
+	  address = 0x77;    // I2C switch address 0x77 for top-level switch
+	  buffer[0] = 0x00;  // I2C channel address 0x00 to open all switches
+	  I2CStat = I2CSEND1;
+
+  return (I2CStat==0 ? 0 : -1);
+}
+
+/*------------------------------------------------------------------
+ * Set up I2C subbus and subsubbus
  ------------------------------------------------------------------*/
 int openI2Cbus(BYTE addr_sb, BYTE addr_ssb)
 {
@@ -145,7 +183,7 @@ int openI2Cbus(BYTE addr_sb, BYTE addr_ssb)
 }
 
 /*------------------------------------------------------------------
- * Close I2C buses for fanout test
+ * Close I2C subbus and subsubbus switches
  ------------------------------------------------------------------*/
 int closeI2Cbus(void)
 {
@@ -245,34 +283,12 @@ int bex(char *inpSt, BYTE addr)
 /*------------------------------------------------------------------
  * Turn on LED
  ------------------------------------------------------------------*/
-//This function turns the LED on the fanout test board on.
-
-/*******************************************************************/
-/**
-  \brief SPI bit-bang read AD7814 temperature sensor.
-
-  This function reads an AD7814 temperature sensor by generating SPI
-  bit-bang signals through a TCA6408A parallel interface chip.
-
-  Requires previous call to function that sets I2C bus switches to
-  address the interface before use, and close after.  Also requires
-  previous single call to initialize interface chip.
-
-  Use case:
- 		  openI2Cbus(I2C_SB0, I2C_SSB7);   // select BEX on warm IF test board
-   		  configBEX(BEXREAD0);            // configure BEX on warm IF test board
-   		  printf("Temperature = %.2f\n", AD7814_SPI_bitbang(SPI_CLK_M, SPI_DAT_M, SPI_CSB1_M));
-   		  closeI2Cbus();
-
-  \param  val  value to convert and send
-  \return temperature, or (9000 + NB I2C error code) for bus errors.
-*/
-int ledOn (void)
+int dcm2LEDonoff (BYTE state)
 {
 	int I2CStat;
 	BYTE tmp;
 
-	openI2Cbus(I2C_SB0, I2C_SSB7);	// select BEX
+	openI2Csbus(I2C_SB7);	// select BEX
 
 	// get command state of output pins on interface
 	address = 0x21;      // I2C address for BEX chip on board
@@ -280,15 +296,47 @@ int ledOn (void)
 	I2CStat = I2CSEND1;  // set register
 	// kick out for I2C bus errors
 	if (I2CStat) return (9000+I2CStat);
-	I2CREAD1;            // get pin data
+	I2CREAD1;            // get pin data from BEX
 	tmp = buffer[0];
 
-	// LED is on P7, address 0x80.  Low is LED on.
+	// LED is on P7, address 0x80; FP LED on P4, address 0x10.  Low is LED on.
 	buffer[0] = 0x01;  // write buffer
-	buffer[1] = tmp & ~0x80;
+	if (state) {  // if true, turn on
+		buffer[1] = tmp & ~(0x80 | 0x10);
+	} else {      // otherwise, turn off
+		buffer[1] = tmp | (0x80 | 0x10);
+	}
 	I2CSEND2;
 
-	closeI2Cbus();
+	closeI2Csbus();
+	return(0);
+}
+
+/*------------------------------------------------------------------
+ * Turn on LED
+ ------------------------------------------------------------------*/
+int ledOn (void)
+{
+	int I2CStat;
+	BYTE tmp;
+
+	openI2Csbus(I2C_SB7);	// select BEX
+
+	// get command state of output pins on interface
+	address = 0x21;      // I2C address for BEX chip on board
+	buffer[0] = 0x01;    // output port register
+	I2CStat = I2CSEND1;  // set register
+	// kick out for I2C bus errors
+	if (I2CStat) return (9000+I2CStat);
+	I2CREAD1;            // get pin data from BEX
+	tmp = buffer[0];
+
+	// LED is on P7, address 0x80; FP LED on P4, address 0x10.  Low is LED on.
+	buffer[0] = 0x01;  // write buffer
+	buffer[1] = tmp & ~(0x80 | 0x10);
+	I2CSEND2;
+
+	closeI2Csbus();
 	return(0);
 }
 
@@ -695,10 +743,10 @@ int cmdParse(char *inpSt)
 		}
 	} else if (narg == 1) {
 		if (!strcasecmp(dev, "B")) {
-			openI2Cbus(I2C_SB0, I2C_SSB7);
+			openI2Csbus(I2C_SB7);
 			printf("\r\nFanout board temperature = %.2f",
 					AD7814_SPI_bitbang(SPI_CLK0_M, SPI_DAT0_M, SPI_CSB1_M, BEX_ADDR0));
-			closeI2Cbus();
+			closeI2Csbus();
 		} else if (!strcasecmp(dev, "E")) {
 				printf("\r\n%d %d %5.3f %5.3f %3.1f %3.1f \r\n"
 						"%d %d %5.3f %5.3f %3.1f %3.1f \r\n"
@@ -738,7 +786,7 @@ int blinkLED (void)
 	int i;  // loop counter
 	BYTE address = 0x21, buffer[2];  // BEX comms
 
-	openI2Cbus(I2C_SB0, I2C_SSB7);	// select BEX
+	openI2Csbus(I2C_SB7);	// select BEX
 
 	// Set configuration register for P0 read, P1..7 write
 	buffer[0] = 0x03;
@@ -760,7 +808,7 @@ int blinkLED (void)
 	buffer[1] = 0x00;
 	I2CSEND2;
 
-	closeI2Cbus();
+	closeI2Csbus();
 	return(0);
 }
 
@@ -877,12 +925,12 @@ void TcpServerTask(void * pd)
 		  OSTimeDly (5);
 		  J2[28].set();  // set pin high to enable IF board I2C switches
 		  // Configure system and turn on LED on completion
-		  openI2Cbus(I2C_SB0, I2C_SSB7);
+		  openI2Csbus(I2C_SB7);
 		  configBEX(BEXREAD0, BEX_ADDR0);
 		  initBEX(BEXINIT0, BEX_ADDR0);
 		  printf("\r\nTest board temperature = %.2f\r\n\r\n",
 				  AD7814_SPI_bitbang(SPI_CLK0_M, SPI_DAT0_M, SPI_CSB1_M, BEX_ADDR0));
-		  closeI2Cbus();
+		  closeI2Csbus();
 		  ledOn();
 
 		  // Try configuring BEX on downconverter board attached to P4, record error state
@@ -1008,29 +1056,6 @@ void UserMain(void * pd)
   // 0x1c for 32.6 kHz
   // 0x1f for 19.5 kHz (slowest)
 
-
-/*
-  // try initializing system at power-up
-  int I2CStatus;
-  // set DCM2 connected to S4 to 0 dB atten
-  openI2Cbus(I2C_SB0, I2C_SSB4);
-  configBEX(BEXREAD, BEX_ADDR);           // configure bus extender
-  I2CStatus = initBEX(BEXINIT, BEX_ADDR); // set initial value
-  portErr[0] = I2CStatus;              // record 0 for success, err code for fail
-  if (!I2CStatus) {
-	  HNC624_SPI_bitbang(SPI_CLK_M, SPI_MOSI_M, (Q_ATTEN_LE | I_ATTEN_LE) , 0, BEX_ADDR);
-  }
-  closeI2Cbus();
-  // set DCM2 connected to S5 to max atten
-  openI2Cbus(I2C_SB0, I2C_SSB5);
-  configBEX(BEXREAD, BEX_ADDR);           // configure bus extender
-  I2CStatus = initBEX(BEXINIT, BEX_ADDR); // set initial value
-  portErr[0] = I2CStatus;              // record 0 for success, err code for fail
-  if (!I2CStatus) {
-	  HNC624_SPI_bitbang(SPI_CLK_M, SPI_MOSI_M, (Q_ATTEN_LE | I_ATTEN_LE) , 40, BEX_ADDR);
-  }
-  closeI2Cbus();
-*/
 
   // Create TCP Server task
   OSTaskCreate( TcpServerTask,
