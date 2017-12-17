@@ -943,9 +943,9 @@ void TcpServerTask(void * pd)
 		  // Initialize and pulse I2C switch reset line
 		  J2[28].function (PINJ2_28_GPIO);  // configure pin J2-28 for GPIO
 		  OSTimeDly (5);
-		  J2[28].clr();  // send reset pulse out at start
+		  J2[28].set();  // send reset pulse out at start
 		  OSTimeDly (5);
-		  J2[28].set();  // set pin high to enable IF board I2C switches
+		  J2[28].clr();  // set pin low to enable IF board I2C switches
 		  // Configure system and turn on LED on completion
 		  openI2Csbus(I2C_SB7);
 		  configBEX(BEXREAD0, BEX_ADDR0);
