@@ -116,16 +116,38 @@ char* inbuf = I2CInputBuffer;            // Pointer to user I2C buffer
 BYTE address = 0;
 BYTE I2CStat;
 
+#define NDCMCHAN 20  // number of DCM2 channels
+
 // Channel-specific structure
 struct dcm2chan {
-	BYTE status[20]; // status byte
-	BYTE iAtten[20]; // command attenuation, I channel
-	BYTE qAtten[20]; // command attenuation, Q channel
-	float iPowDet[20]; // nominal power in dBm, I channel
-	float qPowDet[20]; // nominal power in dBm, Q channel
-	float bTemp[20];   // board temperature, C
+	BYTE status[NDCMCHAN]; // status byte
+	BYTE attenI[NDCMCHAN]; // command attenuation, I channel
+	BYTE attenQ[NDCMCHAN]; // command attenuation, Q channel
+	float powDetI[NDCMCHAN]; // nominal power in dBm, I channel
+	float powDetQ[NDCMCHAN]; // nominal power in dBm, Q channel
+	float bTemp[NDCMCHAN];   // board temperature, C
 };
 
+struct dcm2switches {
+	// I2C switch settings for addressing DCM2 module cards
+	BYTE sb[NDCMCHAN];     // for subbus
+	BYTE ssba[NDCMCHAN];   // for subsbubus, row A
+	BYTE ssbb[NDCMCHAN];   // for subsubbus, row B
+};
+struct dcm2switches dcm2sw = {
+	{0x10, 0x10, 0x10, 0x10, 0x08, 0x08, 0x08, 0x08, 0x04, 0x04, 0x04, 0x04,
+			0x02, 0x02, 0x02, 0x02, 0x01, 0x01, 0x01, 0x01},
+	{0x08, 0x04, 0x02, 0x01, 0x08, 0x04, 0x02, 0x01, 0x08, 0x04, 0x02, 0x01,
+			    0x08, 0x04, 0x02, 0x01, 0x08, 0x04, 0x02, 0x01},
+	{0x80, 0x40, 0x20, 0x10, 0x80, 0x40, 0x20, 0x10, 0x80, 0x40, 0x20, 0x10,
+			    0x80, 0x40, 0x20, 0x10, 0x80, 0x40, 0x20, 0x10}
+};
+
+/*
+#define I2C_SB0 = dcm2sw.sb[19]   // on-board subbus switch setting for A/B 1
+#define I2C_SSB5 = dcm2sw.ssba[19]  // S5 firewire connector, connects to A 1
+#define I2C_SSB4 = dcm2sw.ssbb[19]  // S4 firewire connector, connects to B 1
+*/
 
 // Functions
 
@@ -932,6 +954,8 @@ void TcpServerTask(void * pd)
 				  AD7814_SPI_bitbang(SPI_CLK0_M, SPI_DAT0_M, SPI_CSB1_M, BEX_ADDR0));
 		  closeI2Csbus();
 		  ledOn();
+		  // report on switch settings
+		  iprintf("sb = 0x%02x, ssba = 0x%02x, ssbb = 0x%02x\r\n", I2C_SB0, I2C_SSB5, I2C_SSB4);
 
 		  // Try configuring BEX on downconverter board attached to P4, record error state
 		  openI2Cbus(I2C_SB0, I2C_SSB4);
