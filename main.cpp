@@ -629,11 +629,12 @@ int cmdParse(char *inpSt)
 			"B        : Read fanout board temperature sensor\r\n"
 			"E        : Echo system values\r\n"
 			"JE       : Echo system values, JSON format\r\n"
+			"T        : Some test thing\r\n"
 			"?        : This message\r\n"
 			"quit     : Exit\r\n\r\n";
 
 
-	closeI2Cbus();  // ensure bus switches are
+	closeI2Cbus();  // ensure bus switches are open
 
 	// read string and select action
 	int narg = sscanf(inpSt, "%s %d %s %f", dev, &dcm, iq, &atten);
@@ -786,6 +787,13 @@ int cmdParse(char *inpSt)
 						logampOut[0], logampOut[1], logampOut[2], logampOut[3],
 						logampOut[0]*DBMSCALE+DBMOFFSET, logampOut[1]*DBMSCALE+DBMOFFSET,
 						logampOut[2]*DBMSCALE+DBMOFFSET, logampOut[3]*DBMSCALE+DBMOFFSET);
+		} else if (!strcasecmp(dev, "T")){  // Test area
+			openI2Csbus(I2C_SB7);
+			closeI2Csbus();
+			openI2Cbus(I2C_SB0, I2C_SSB4);
+			closeI2Cbus();
+			openI2Cbus(I2C_SB0, I2C_SSB5);
+			closeI2Cbus();
 		} else {
 				iprintf("%s", errMsg);
 		}
