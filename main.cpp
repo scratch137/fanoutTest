@@ -52,9 +52,11 @@ const char *AppName = "fanoutTest";
 #endif
 
 // addresses to talk with DCM2 modules
-#define I2C_SB0 0x10   // on-board subbus switch setting for A/B 1
-#define I2C_SSB5 0x04  // S5 firewire connector, connects to A 1
-#define I2C_SSB4 0x80  // S4 firewire connector, connects to B 1
+/*
+#define I2C_SB0 0x10 //0x10   // on-board subbus switch setting for A/B 1
+#define I2C_SSB5 0x08 //0x04  // S5 firewire connector, connects to A 1
+#define I2C_SSB4 0x80 // 0x80  // S4 firewire connector, connects to B 1
+*/
 // addresses to talk with peripherals
 #define I2C_SB7 0x80  // on-board BEX
 
@@ -143,11 +145,11 @@ struct dcm2switches dcm2sw = {
 			    0x80, 0x40, 0x20, 0x10, 0x80, 0x40, 0x20, 0x10}
 };
 
-/*
-#define I2C_SB0 = dcm2sw.sb[19]   // on-board subbus switch setting for A/B 1
-#define I2C_SSB5 = dcm2sw.ssba[19]  // S5 firewire connector, connects to A 1
-#define I2C_SSB4 = dcm2sw.ssbb[19]  // S4 firewire connector, connects to B 1
-*/
+
+BYTE chan = 19;
+BYTE I2C_SB0 = dcm2sw.sb[chan];   // on-board subbus switch setting for A/B 1
+BYTE I2C_SSB5 = dcm2sw.ssba[chan];  // S5 firewire connector, connects to A 1
+BYTE I2C_SSB4 = dcm2sw.ssbb[chan];  // S4 firewire connector, connects to B 1
 
 // Functions
 
