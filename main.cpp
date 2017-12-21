@@ -145,11 +145,25 @@ struct dcm2switches dcm2sw = {
 			    0x80, 0x40, 0x20, 0x10, 0x80, 0x40, 0x20, 0x10}
 };
 
-
 BYTE chan = 19;
 BYTE I2C_SB0 = dcm2sw.sb[chan];   // on-board subbus switch setting for A/B 1
 BYTE I2C_SSB5 = dcm2sw.ssba[chan];  // S5 firewire connector, connects to A 1
 BYTE I2C_SSB4 = dcm2sw.ssbb[chan];  // S4 firewire connector, connects to B 1
+
+float adcVal[] = {99, 99, 99, 99, 99, 99, 99, 99, 99};
+
+struct chRead { // read ADCs
+  char i2c[8];  // board-level i2c addr
+  char add[8];  // addr in device
+  float sc;     // scale for reading
+  float offset; // offset for reading
+  char bip;     // bipolar or unipolar, bipolar = 1
+};
+// power control board monitor points (pcRead.add used in other locations too)
+struct chRead pcRead = {
+		{0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08},
+		{0x88, 0xc8, 0x98, 0xd8, 0xa8, 0xe8, 0xb8, 0xf8},
+		1, 0, 0};
 
 // Functions
 
@@ -302,6 +316,37 @@ int bex(char *inpSt, BYTE addr)
 
   return 0;
 }
+
+/*------------------------------------------------------------------
+ * Read ADC
+ ------------------------------------------------------------------*/
+int readADC(void)
+{
+
+	short i;
+	unsigned short int rawu;
+	const float offset[8] = {0};
+	const float scale[8] = {4.3, 4.3, 4.3, 4.3, 4.3, 4.3, 4.3, 4.3};
+	//const float scale[8] = {1, 1, 1, 1, 1, 1, 1, 1};  // for calibration
+	// vds, -15, +15, vcc, vcal, vif, swvif, iif
+
+
+	//Read all channels of ADC
+	for (i = 0 ;  i < 8 ; i++) {
+		address = (BYTE)0x08;    // ADC device address on I2C bus
+		buffer[0] = (BYTE)pcRead.add[i];        // internal address for channel
+		I2CStat = I2CSEND1;  // send command for conversion
+		I2CREAD2;  // read device buffer back
+		if (I2CStat == 0) {
+			rawu =(unsigned short int)(((unsigned char)buffer[0]<<8) | (unsigned char)buffer[1]);
+			adcVal[i] = rawu*scale[i]*4.096/65535 + offset[i];
+		}
+		else adcVal[i] = 99.;  // error condition
+	}
+
+	return I2CStat;
+}
+
 
 
 /*------------------------------------------------------------------
@@ -962,6 +1007,9 @@ void TcpServerTask(void * pd)
 		  initBEX(BEXINIT0, BEX_ADDR0);
 		  printf("\r\nTest board temperature = %.2f\r\n\r\n",
 				  AD7814_SPI_bitbang(SPI_CLK0_M, SPI_DAT0_M, SPI_CSB1_M, BEX_ADDR0));
+		  readADC();
+		  printf("ADC values: %f, %f, %f, %f, %f, %f, %f, %f\r\n\r\n",
+				  adcVal[0], adcVal[1], adcVal[2], adcVal[3], adcVal[4], adcVal[5], adcVal[6], adcVal[7]);
 		  closeI2Csbus();
 		  ledOn();
 		  // report on switch settings
